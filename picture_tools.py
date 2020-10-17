@@ -1,10 +1,14 @@
 import os
 import exif
 import shutil
+import logging
+from typing import Optional
+from pathlib import Path
+from PIL import Image, ExifTags
 
 
 def getPathsRecursively(folder_name):
-    # TODO: Transform into non-recursive version?
+    # TODO: Use glob.rglob or os.path.walk!
     files = []
     folder_content = os.listdir(folder_name)
     for entry in folder_content:
@@ -44,11 +48,11 @@ def generateNewPaths(paths, source_folder, target_folder, keep_orig_name):
                 image = exif.Image(file)
 
                 if image.has_exif:
-                    split_path[-1] = generateNewFileName(image.datetime, split_path[-1],
+                    split_path[-1] = generateNewFileName(image.datetime_original, split_path[-1],
                                                          keep_orig_name)
                 else:
                     files_without_exif.append(path)
-            except AssertionError:
+            except (AttributeError, AssertionError):
                 print('ERROR: File', path,
                       'does not seem to contain Exif',
                       'information. It will be copied')
@@ -59,29 +63,36 @@ def generateNewPaths(paths, source_folder, target_folder, keep_orig_name):
     return new_paths, files_without_exif
 
 
+def get_exif_creation_date(img_path: Path) -> Optional[Path]:
+    with open(img_path, 'rb') as file:
+        image = exif.Image(file)
+
+        if image.has_exif:
+            return image.datetime_original
+
+        else:
+            print(f"INFO: File {img_path} does not seem to contain Exif information. It will be copied.")
+            return None
+
+
 def renameFilesExif(source_folder, target_folder, keep_orig_name):
-    assert(source_folder != target_folder)
+    assert source_folder != target_folder, "Program needs to be run with different source and target folders"
 
-    paths = getPathsRecursively(source_folder)
+    for root, _, files in os.walk(source_folder):
+        for file in files:
+            path = Path(root) / file
 
-    new_paths, files_without_exif = generateNewPaths(paths, source_folder, target_folder,
-                                                     keep_orig_name)
+            exif_creation_date = get_exif_creation_date(path)
 
-    if len(files_without_exif):
-        print('The following files did not contain exif information and were just copied:')
-        for name in files_without_exif:
-            print(name)
+            new_path = Path(str(path).replace(source_folder, target_folder))
 
-    assert(len(paths) == len(new_paths))
+            if exif_creation_date is not None:
+                new_file_name = generateNewFileName(exif_creation_date, new_path.name, keep_orig_name)
+            else:
+                new_file_name = new_path.name
 
-    if not os.path.exists(target_folder):
-        os.makedirs(target_folder)
+            new_path = new_path.parent / new_file_name
 
-    for i in range(len(paths)):
-        if not os.path.exists(os.path.dirname(new_paths[i])):
-            os.makedirs(os.path.dirname(new_paths[i]), exist_ok=True)
-        shutil.copy2(paths[i], new_paths[i])
-
-    new_paths_check = getPathsRecursively(target_folder)
-
-    assert(len(paths) == len(new_paths_check))
+            if not new_path.parent.exists():
+                new_path.parent.mkdir(exist_ok=True)
+            shutil.copy2(path, new_path)
