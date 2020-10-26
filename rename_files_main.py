@@ -1,7 +1,7 @@
+import argparse
+from pathlib import Path
 
 import picture_tools as pt
-import argparse
-
 
 parser = argparse.ArgumentParser(description='Rename (and copy) images using exif information.')
 parser.add_argument('source_folder', help='Source folder')
@@ -13,4 +13,4 @@ parser.set_defaults(keep_orig_name=False)
 
 args = parser.parse_args()
 
-pt.renameFilesExif(args.source_folder, args.target_folder, args.keep_orig_name)
+pt.rename_files_exif(Path(args.source_folder), Path(args.target_folder), args.keep_orig_name)

@@ -1,85 +1,76 @@
-import unittest
+import pytest  # type: ignore
 import os
+from pathlib import Path
+from typing import Optional, Tuple
+
 import picture_tools as pt
 
 
-class TestGetPathList(unittest.TestCase):
-    def test_simple(self):
-        correct = ['test/IMG_4600.JPG', 'test/fileWithoutExif.txt']
-        actual = pt.getPathsRecursively('test')
+@pytest.fixture
+def test_filename_generation_inputs() -> Tuple[str, str]:
+    datetime_example = '2019:12:29 21:44:22'
+    file_name = 'IMG_4600.JPG'
 
-        self.assertEqual(len(actual), len(correct))
-        self.assertEqual(actual.sort(), correct.sort())
-
-
-class TestGenerateNewFileName(unittest.TestCase):
-    def setUp(self):
-        self.datetime_example = '2019:12:29 21:44:22'
-        self.file_name = 'IMG_4600.JPG'
-        self.new_file_name_keep = '2019-12-29_21-44-22_IMG_4600.JPG'
-        self.new_file_name_keep_not = '2019-12-29_21-44-22.JPG'
-
-    def test_keep(self):
-        self.assertEqual(self.new_file_name_keep,
-                         pt.generateNewFileName(self.datetime_example, self.file_name, True))
-
-    def test_not_keep(self):
-        self.assertEqual(self.new_file_name_keep_not,
-                         pt.generateNewFileName(self.datetime_example, self.file_name, False))
+    return datetime_example, file_name
 
 
-class TestGenerateNewPathsRelPath(unittest.TestCase):
-    def setUp(self):
-        self.source = 'test'
-        self.target = 'test_renamed'
-        self.input = [self.source + '/subdir/IMG_4600.JPG', self.source + '/fileWithoutExif.txt']
+def test_generate_file_name_keep(test_filename_generation_inputs: Tuple[str, str]):
+    """Check returned filename in case the old one should be kept."""
 
-    def test_keep(self):
-        correct_paths = [self.target + '/subdir/2019-12-29_21-44-22_IMG_4600.JPG',
-                         self.target + '/fileWithoutExif.txt']
-        correct_without_exif = [self.target + '/fileWithoutExif.txt']
-        actual_paths, actual_without_exif = pt.generateNewPaths(self.input, self.source,
-                                                                self.target, True)
+    datetime_example, filename_input = test_filename_generation_inputs
+    new_file_name_keep = '2019-12-29_21-44-22_IMG_4600.JPG'
 
-        self.assertEqual(len(correct_paths), len(actual_paths))
-        self.assertEqual(correct_paths.sort(), actual_paths.sort())
-
-        self.assertEqual(len(correct_without_exif), len(actual_without_exif))
-        self.assertEqual(correct_without_exif.sort(), actual_without_exif.sort())
-
-    def test_keep_not(self):
-        correct_paths = [self.target + '/subdir/2019-12-29_21-44-22.JPG',
-                         self.target + '/fileWithoutExif.txt']
-        correct_without_exif = [self.target + '/fileWithoutExif.txt']
-        actual_paths, actual_without_exif = pt.generateNewPaths(self.input, self.source,
-                                                                self.target, False)
-
-        self.assertEqual(len(correct_paths), len(actual_paths))
-        self.assertEqual(correct_paths.sort(), actual_paths.sort())
-
-        self.assertEqual(len(correct_without_exif), len(actual_without_exif))
-        self.assertEqual(correct_without_exif.sort(), actual_without_exif.sort())
+    assert new_file_name_keep == pt.generateNewFileName(datetime_example, filename_input, True)
 
 
-class TestGenerateNewPathsAbsPath(unittest.TestCase):
-    def setUp(self):
-        self.source = os.getcwd() + '/test'
-        self.target = os.getcwd() + '/out/test_renamed'
-        self.input = [self.source + '/subdir/IMG_4600.JPG', self.source + '/fileWithoutExif.txt']
+def test_generate_file_name_keep_not(test_filename_generation_inputs: Tuple[str, str]):
+    """Check returned filename in case the old one should be kept."""
 
-    def test_keep(self):
-        correct_paths = [self.target + '/subdir/2019-12-29_21-44-22_IMG_4600.JPG',
-                         self.target + '/fileWithoutExif.txt']
-        correct_without_exif = [self.target + '/fileWithoutExif.txt']
-        actual_paths, actual_without_exif = \
-            pt.generateNewPaths(self.input, self.source, self.target, True)
+    datetime_example, filename_input = test_filename_generation_inputs
+    new_file_name_keep_not = '2019-12-29_21-44-22.JPG'
 
-        self.assertEqual(len(correct_paths), len(actual_paths))
-        self.assertEqual(correct_paths.sort(), actual_paths.sort())
-
-        self.assertEqual(len(correct_without_exif), len(actual_without_exif))
-        self.assertEqual(correct_without_exif.sort(), actual_without_exif.sort())
+    assert new_file_name_keep_not == pt.generateNewFileName(datetime_example, filename_input, False)
 
 
-if __name__ == '__main__':
-    unittest.main()
+def test_get_exif_creation_date_success_simple() -> None:
+    """Check that exif creation date is correct for file with exif information."""
+
+    path: Path = Path('test/subdir/IMG_4600.JPG')
+    expected_exif_date: str = "2019:06:21 15:42:21"
+
+    result: Optional[str] = pt.get_exif_creation_date(path)
+    assert result is not None, "Got None as result when Optional should have a value"
+
+    assert result == expected_exif_date, f"Obtained wrong result {result}. Should be {expected_exif_date}"
+
+
+def test_get_exif_creation_date_fail_simple() -> None:
+    """Check that exif creation date is None for file without exif information."""
+
+    path: Path = Path('test/fileWithoutExif.txt')
+    result: Optional[str] = pt.get_exif_creation_date(path)
+
+    assert result is None, "Got string when Optional should be None"
+
+
+def test_rename_files_exif_keep_not(tmp_path: Path) -> None:
+    """Check that correct folder structure is produced when original file names should not be kept."""
+    source_folder: Path = Path("test")
+    target_folder: Path = tmp_path
+
+    pt.rename_files_exif(source_folder, target_folder, False)
+
+    assert (target_folder / "fileWithoutExif.txt").exists()
+    assert (target_folder / "subdir" / "2019-06-21_15-42-21.JPG").exists()
+
+
+def test_rename_files_exif_keep(tmp_path: Path) -> None:
+    """Check that correct folder structure is produced when original file names should be kept."""
+    source_folder: Path = Path("test")
+    target_folder: Path = tmp_path
+
+    pt.rename_files_exif(source_folder, target_folder, True)
+
+    assert (target_folder / "fileWithoutExif.txt").exists()
+    assert (target_folder / "subdir" / "2019-06-21_15-42-21_IMG_4600.JPG").exists()
+
