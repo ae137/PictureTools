@@ -1,4 +1,5 @@
 import os
+import datetime
 import exif  # type: ignore
 import shutil
 import logging
@@ -7,18 +8,22 @@ from pathlib import Path
 from PIL import Image, ExifTags  # type: ignore
 
 
-def generateNewFileName(exif_datetime: str, file_name: str, keep_orig_name: bool) -> str:
+def generateNewFileName(exif_datetime: str, file_name: str, keep_orig_name: bool, time_difference: int) -> str:
     """Generate new file name using exif date-time information.
 
     Args:
         exif_datetime: Date-time string
         file_name: Input file name
         keep_orig_name: Flag whether the original file name should be part of the new file name
+        time_difference: Time difference that should be used to correct the time stamps in hours
 
     Returns:
         New file name
     """
-    img_datetime = exif_datetime.replace(':', '-').replace(' ', '_')
+    date_time_obj = datetime.datetime.strptime(exif_datetime, '%Y:%m:%d %H:%M:%S')
+    date_time_obj += datetime.timedelta(hours=time_difference)
+
+    img_datetime = str(date_time_obj).replace(':', '-').replace(' ', '_')
 
     if keep_orig_name:
         file_name = img_datetime + '_' + file_name
@@ -54,13 +59,17 @@ def get_exif_creation_date(img_path: Path) -> Optional[str]:
             return None
 
 
-def rename_files_exif(source_folder: Path, target_folder: Path, keep_orig_name: bool) -> None:
+def rename_files_exif(source_folder: Path,
+                      target_folder: Path,
+                      keep_orig_name: bool,
+                      time_difference: int = 0) -> None:
     """Rename files using exif date-time information.
 
     Args:
         source_folder: Folder to read files from
         target_folder: Folder for renamed files
         keep_orig_name: Flag whether original file name should be part of the new file name
+        time_difference: Time difference that should be used to correct the time stamps in hours
     """
     assert source_folder != target_folder, "Program needs to be run with different source and target folders"
 
@@ -71,7 +80,7 @@ def rename_files_exif(source_folder: Path, target_folder: Path, keep_orig_name: 
             exif_creation_date: Optional[str] = get_exif_creation_date(path)
 
             if exif_creation_date is not None:
-                new_file_name = generateNewFileName(exif_creation_date, path.name, keep_orig_name)
+                new_file_name = generateNewFileName(exif_creation_date, path.name, keep_orig_name, time_difference)
             else:
                 new_file_name = path.name
 
